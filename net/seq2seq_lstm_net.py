@@ -73,19 +73,19 @@ class Decoder(keras.Model):
         concatenate_output = self.concatenate([dec_outputs, attention_output])  # 一定要把注意力输出和解码输出粘接起来
         return concatenate_output, state_h, state_c
 # encoder和decoder模块合并，组成一个完整的seq2seq模型
-def Seq2Seq(vocab_size):
+def Seq2Seq(src_vocab_size,tgt_vocab_size):
     # Input Layer
     encoder_inputs = Input(shape=(None, ), name="encode_input")
     decoder_inputs = Input(shape=(None, ), name="decode_input")
     # Encoder Layer
-    encoder = Encoder(N_UNITS, vocab_size, embedding_dim)
+    encoder = Encoder(N_UNITS, src_vocab_size, embedding_dim)
     enc_outputs,enc_state_h, enc_state_c = encoder(encoder_inputs)
     enc_states = [enc_state_h, enc_state_c]
     # Decoder Layer
-    decoder = Decoder(N_UNITS, vocab_size, embedding_dim)
+    decoder = Decoder(N_UNITS, tgt_vocab_size, embedding_dim)
     dec_output, _, _ = decoder(enc_outputs,decoder_inputs, enc_states)
     # Dense Layer
-    dense_outputs = Dense(vocab_size, activation='softmax', name="final_out_dense")(dec_output)
+    dense_outputs = Dense(tgt_vocab_size, activation='softmax', name="final_out_dense")(dec_output)
     # seq2seq model
     model = Model(inputs=[encoder_inputs, decoder_inputs], outputs=dense_outputs)
     return model
