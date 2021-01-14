@@ -56,7 +56,7 @@ def infer_beam_search(source,encoder_inference, decoder_inference, n_steps, k=3)
                 predict_data.append(state)  # 第三位保存状态
                 predict_data_list_next.append(predict_data)
         predict_data_list_all.append(predict_data_list_next)
-        display_k = 2  # 需要显示束宽固定为2
+        display_k = 1  # 需要显示束宽固定为2
         predict_list = heapq.nlargest(display_k, predict_data_list_next, lambda data_list: data_list[0])
         out = []
         for predict in predict_list:
@@ -65,26 +65,46 @@ def infer_beam_search(source,encoder_inference, decoder_inference, n_steps, k=3)
     return output
 
 model_train = seq2seq_cnn2lstm_net.Seq2Seq_CNN2LSTM(pre_data_utils.piece_len)
-model_train.load_weights("model/seq2seq_cnn2lstm直选.h5")
+model_train.load_weights("model/seq2seq_cnn2lstm直选txt3.h5")
 encoder_infer = seq2seq_cnn2lstm_net.encoder_infer(model_train)
 decoder_infer = seq2seq_cnn2lstm_net.decoder_infer(model_train,encoder_infer)
 
-# texts = [[8,8,3, 5,3,1]]
-predict_index = 2
-# 原输入
-texts0 = [pre_data_utils.preDataAdd0(data_eval.getEvalData(), pre_data_utils.piece_len)[predict_index]]
-# 原输入+1
-texts1 = [pre_data_utils.preDataAdd1(data_eval.getEvalData(), pre_data_utils.piece_len)[predict_index]]
-# 正确的值
-tgt_in, tgt_out = pre_data_utils.preLabels1(data_eval.getEvalData(), pre_data_utils.piece_len)
-true_out = tgt_in[predict_index][1:]
-for i,text in enumerate(texts1):
+# 实际预测
+def predict():
+    # 原输入
+    source_list,add1_list = pre_data_utils.read_txt_data_predict()
     # 以下代码将其归一化到0-1之间的浮点数，并在最后增加一维作为颜色通道
-    encoder_input = pre_data_utils.guiyiAndChannel([text])
-    out = infer_beam_search(encoder_input, encoder_infer, decoder_infer, pre_data_utils.tgt_out_len,5)
-    print("texts1", texts1)
-    print("texts0", texts0)
+    encoder_input = pre_data_utils.guiyiAndChannel(add1_list)
+    out = infer_beam_search(encoder_input, encoder_infer, decoder_infer, pre_data_utils.tgt_out_len,pre_data_utils.piece_len)
+    print("source_list", source_list)
     print("out", out)
+
+# 测试和验证
+def testAndValidate(predict_index=0):
+    # 正确的值
+    tgt_in, tgt_out = pre_data_utils.preLabels1(pre_data_utils.read_txt_data_train(), pre_data_utils.piece_len)
+    tgt_out = tgt_out[pre_data_utils.test_last_index:][predict_index]
+    true_out = tgt_out[0:-1]
+    # 原输入
+    source_list = pre_data_utils.preDataAdd0(pre_data_utils.read_txt_data_train(), pre_data_utils.piece_len)
+    source_list = source_list[pre_data_utils.test_last_index:][predict_index]  # 从倒数第10个样本作为测试样本
+    # 原输入+1
+    add1_list = pre_data_utils.preDataAdd1(pre_data_utils.read_txt_data_train(), pre_data_utils.piece_len)
+    add1_list = add1_list[pre_data_utils.test_last_index:][predict_index]  # 从倒数第10个样本作为测试样本
+    # 以下代码将其归一化到0-1之间的浮点数，并在最后增加一维作为通道
+    encoder_input = pre_data_utils.guiyiAndChannel([add1_list])
+    out = infer_beam_search(encoder_input, encoder_infer, decoder_infer, pre_data_utils.tgt_out_len,3)
+    print("source_list", source_list)
     print("true_out", true_out)
+    # print("add1_list", add1_list)
+    print("out", out)
+
+if __name__ == '__main__':
+    # 测试验证
+    # testAndValidate(9)
+    # 实际预测
+    predict()
+
+
 
 

@@ -2,10 +2,13 @@ import numpy as np
 
 # 定义一些常量
 BATCH_SIZE = 512
-EPOCH = 200
+EPOCH = 500
 piece_len = 10
 tgt_out_len = 4
 tgt_vocab_size = 12
+train_first_index = -1000
+train_last_index = None  # 从0至倒数第10个样本作为训练，剩下的作为测试样本
+test_last_index = -10  # 从0至倒数第10个样本作为训练，剩下的作为测试样本
 
 # 如果只有两位数，前面补一个0
 def appendTo3(label_sequence_str):
@@ -118,3 +121,35 @@ def gen_sequence_targt(sentence_list,sentence_len,vocab_size):
             sen_vec_out[char_index, char] = 1.0
         sequence_out.append(sen_vec_out.tolist())
     return np.array(sequence_out)
+
+# 读取txt类型的训练数据
+def read_txt_data_train():
+    data_path = 'dataLib/nn_999_train.txt'
+    source_list = []
+    with open(data_path, "r", encoding='utf-8', ) as f:
+        for line in f:
+            content = line.replace(' ', '')
+            content = content.replace('\n', '')  # 去掉换行符
+            source_list.append(content)
+    return source_list
+
+# 读取txt类型的预测数据
+def read_txt_data_predict():
+    data_path = 'dataLib/nn_999_predict.txt'
+    source_list = []
+    add1_list = []
+    with open(data_path, "r", encoding='utf-8', ) as f:
+        for line in f:
+            content = line.replace(' ', '')
+            content = content.replace('\n', '')  # 去掉换行符
+            source_list.append(content)
+            add1 = appendTo3Add1(content)
+            add1_list.append(add1)
+    return [source_list],[add1_list]
+
+
+if __name__ == '__main__':
+    source_list = read_txt_data_train()[6756:]
+    print(source_list)
+    source_list = preDataAdd1(source_list, piece_len)
+    print(source_list)
