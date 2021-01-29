@@ -2,10 +2,8 @@ from tensorflow.keras import models
 import tensorflow.keras.layers as kl
 import tensorflow.keras.backend as k
 from tensorflow import keras
+from py_nn_999.utils import pre_data_utils
 
-hidden_units = 128
-embedding_dim = 150
-tgt_vocab_size = 12
 
 # ----CBAM 卷积注意力网络结构
 # 网上原理讲解文章：https://zhuanlan.zhihu.com/p/101590167
@@ -23,8 +21,10 @@ def channel_attention(input_xs, reduction_ratio):  # input_xs (None,piece_len,3,
     avgpool_channel = kl.GlobalAvgPool2D()(input_xs)  # (None,64) 全局平均池化
     avgpool_channel = kl.Reshape((1, 1, channel))(avgpool_channel)  # (None,1,1,64)
     # 权值共享
-    dense_one = kl.Dense(units=int(channel * reduction_ratio), activation='relu', kernel_initializer='he_normal', use_bias=True, bias_initializer='zeros')
-    dense_two = kl.Dense(units=int(channel), activation='relu', kernel_initializer='he_normal', use_bias=True, bias_initializer='zeros')
+    dense_one = kl.Dense(units=int(channel * reduction_ratio), activation='relu',
+                         kernel_initializer='he_normal', use_bias=True, bias_initializer='zeros')
+    dense_two = kl.Dense(units=int(channel), activation='relu',
+                         kernel_initializer='he_normal', use_bias=True, bias_initializer='zeros')
     # max path
     mlp_1_max = dense_one(maxpool_channel)  # (None,1,1,32)
     mlp_2_max = dense_two(mlp_1_max)  # (None,1,1,64)
@@ -50,8 +50,7 @@ def spatial_attention(channel_refined_feature): # channel_refined_feature (None,
 
     max_avg_pool_spatial = kl.Concatenate(axis=3)([maxpool_spatial, avgpool_spatial])  # (None,piece_len,3,2)
 
-    spatial_attention_feature = kl.Conv2D(filters=1, kernel_size=(2, 2), padding="same", activation='sigmoid', kernel_initializer='he_normal',
-                                          use_bias=False)(max_avg_pool_spatial)  # conv(None,piece_len,3,1)
+    spatial_attention_feature = kl.Conv2D(filters=1, kernel_size=(2, 2), padding="same", activation='relu')(max_avg_pool_spatial)  # conv(None,piece_len,3,1)
 
     multiply_channel_spatial = kl.Multiply()([channel_refined_feature, spatial_attention_feature])  # (None,piece_len,3,64)
     return multiply_channel_spatial
@@ -67,40 +66,71 @@ def cbam_block(input_xs, reduction_ratio=0.5): # input_(None,piece_len,3,64)
 def CBAMModel(inputs,piece_len): # inputs (None, piece_len, 3, 1)
     # 卷积层
 
-    x = kl.Conv2D(64, (2, 2), padding='same')(inputs)
+    x = kl.Conv2D(64, (3, 2), padding='same')(inputs)
     x = kl.BatchNormalization(axis=3)(x)
     x = kl.Activation('relu')(x)
 
-    x = kl.Conv2D(64, (2, 2), padding='same')(x)
+    x = kl.Conv2D(64, (5, 2), padding='same')(x)
     x = kl.BatchNormalization(axis=3)(x)
     x = kl.Activation('relu')(x)
-    # x = kl.MaxPool2D(pool_size=[2, 3], strides=2)(x)
+    #############################################
+    x = kl.Conv2D(128, (5, 2), padding='same')(x)
+    x = kl.BatchNormalization(axis=3)(x)
+    x = kl.Activation('relu')(x)
 
-    x = kl.Conv2D(128, (2, 2), padding='same')(x)
+    x = kl.Conv2D(128, (5, 2), padding='same')(x)
+    x = kl.BatchNormalization(axis=3)(x)
+    x = kl.Activation('relu')(x)
+    ##############################################
+    x = kl.Conv2D(256, (5, 2), padding='same')(x)
     x = kl.BatchNormalization(axis=3)(x)
     x = kl.Activation('relu')(x)
 
-    x = kl.Conv2D(128, (2, 2), padding='same')(x)
+    x = kl.Conv2D(256, (5, 2), padding='same')(x)
     x = kl.BatchNormalization(axis=3)(x)
     x = kl.Activation('relu')(x)
+
+    # x = kl.Conv2D(256, (5, 2), padding='same')(x)
+    # x = kl.BatchNormalization(axis=3)(x)
+    # x = kl.Activation('relu')(x)
+    #
+    # x = kl.Conv2D(256, (5, 2), padding='same')(x)
+    # x = kl.BatchNormalization(axis=3)(x)
+    # x = kl.Activation('relu')(x)
+    #############################################
+    # x = kl.Conv2D(512, (5, 2), padding='same')(x)
+    # x = kl.BatchNormalization(axis=3)(x)
+    # x = kl.Activation('relu')(x)
+    #
+    # x = kl.Conv2D(512, (5, 2), padding='same')(x)
+    # x = kl.BatchNormalization(axis=3)(x)
+    # x = kl.Activation('relu')(x)
+    #
+    # x = kl.Conv2D(512, (5, 2), padding='same')(x)
+    # x = kl.BatchNormalization(axis=3)(x)
+    # x = kl.Activation('relu')(x)
+    #
+    # x = kl.Conv2D(512, (5, 2), padding='same')(x)
+    # x = kl.BatchNormalization(axis=3)(x)
+    # x = kl.Activation('relu')(x)
 
     # 注意力层
     x = cbam_block(x)  # 调用cbam 注意力模块 (None,piece_len,3,128)
 
-    x = kl.Conv2D(filters=1, kernel_size=(1, 1), padding="same", activation='relu')(x)  # conv(None,piece_len,3,1)
+    x = kl.Conv2D(filters=1, kernel_size=(5, 2), padding="same", activation='relu')(x)  # conv(None,piece_len,3,1)
 
     # 改变形状传给lstm层
     # Reshape和Flatten层的区别：
     # 1、Flatten将输入“压平”，即把多维的输入一维化，常用在从卷积层到全连接层的过渡，Flatten不影响batch的大小
     # 2、Reshape将输出调整为特定形状。
-    reshape1 = kl.Reshape((piece_len, 3))(x)  # 把行数和列数数合并 !!!!这个地方很关键，应该着重调整 !!!
+    reshape1 = kl.Reshape((3, piece_len))(x)  # 把行数和列数数互换 !!!!这个地方很关键，应该着重调整 !!!
     return reshape1
 
 # 编码器，标准的RNN/LSTM模型，取最后时刻的隐藏层作为输出
 class Encoder(keras.Model):
     def __init__(self):
         super(Encoder, self).__init__()
-        self.encoder_lstm = kl.LSTM(hidden_units, activation='tanh', return_sequences=True, return_state=True)# Encode LSTM Layer
+        self.encoder_lstm = kl.LSTM(pre_data_utils.hidden_units, activation='tanh', return_sequences=True, return_state=True)# Encode LSTM Layer
     def call(self, inputs):
         outputs, state_h, state_c = self.encoder_lstm(inputs)
         return outputs,state_h, state_c
@@ -108,8 +138,8 @@ class Encoder(keras.Model):
 class Decoder(keras.Model):
     def __init__(self):
         super(Decoder, self).__init__()
-        self.embedding = kl.Embedding(tgt_vocab_size, embedding_dim, mask_zero=False)  # Embedding Layer
-        self.decoder_lstm = kl.LSTM(hidden_units, activation='tanh', return_sequences=True, return_state=True) # Decode LSTM Layer
+        self.embedding = kl.Embedding(pre_data_utils.tgt_vocab_size, pre_data_utils.embedding_dim, mask_zero=False)  # Embedding Layer
+        self.decoder_lstm = kl.LSTM(pre_data_utils.hidden_units, activation='tanh', return_sequences=True, return_state=True) # Decode LSTM Layer
         self.attention = kl.Attention()  # Attention Layer
         self.concatenate = kl.Concatenate(axis=-1, name='concat_layer')  # Concatenate Layer
     def call(self,enc_outputs,dec_inputs, init_state):
@@ -121,12 +151,12 @@ class Decoder(keras.Model):
 # encoder和decoder模块合并，组成一个完整的seq2seq模型
 def Seq2Seq_CNN2LSTM(piece_len=3):
     # Encoder Input Layer
-    encoder_inputs = kl.Input(shape=(piece_len, 3, 1), name="encode_input")
+    encoder_inputs = kl.Input(shape=(piece_len, 3, 4), name="encode_input")
 
     cbam_output = CBAMModel(encoder_inputs,piece_len)  # cnn注意力机制提取特征
     # Encoder Layer
     encoder = Encoder()
-    enc_outputs,enc_state_h, enc_state_c = encoder(cbam_output)
+    enc_outputs, enc_state_h, enc_state_c = encoder(cbam_output)
     enc_states = [enc_state_h, enc_state_c]
 
     # Decoder Layer
@@ -140,7 +170,7 @@ def Seq2Seq_CNN2LSTM(piece_len=3):
     # Dense Layer
     # dense_outputs = kl.Dense(64, activation='relu', name='fc1')(dec_output)
     # dense_outputs = kl.Dense(64, activation='relu', name='fc2')(dense_outputs)
-    dense_outputs = kl.Dense(tgt_vocab_size, activation='softmax', name="final_out_dense")(dec_output)
+    dense_outputs = kl.Dense(pre_data_utils.tgt_vocab_size, activation='softmax', name="final_out_dense")(dec_output)
     # seq2seq model
     model = models.Model(inputs=[encoder_inputs, decoder_inputs], outputs=dense_outputs)
     return model
@@ -175,5 +205,5 @@ def decoder_infer(model,encoder_model):
                           outputs=[dense_output]+dec_states_out)
     return decoder_model
 if __name__ == '__main__':
-    model = Seq2Seq_CNN2LSTM(5)
+    model = Seq2Seq_CNN2LSTM(0)
     model.summary()
